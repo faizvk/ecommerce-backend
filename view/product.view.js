@@ -6,21 +6,35 @@ import AutherizeRole from "../auth/role.middleware.js";
 
 const router = express.Router();
 
+/* -----------------------------------------------------
+    ADMIN: CREATE PRODUCT
+------------------------------------------------------ */
 router.post(
   "/product",
   verifyToken,
   AutherizeRole("admin"),
   async (req, res) => {
     try {
-      const product = req.body;
+      const {
+        name,
+        description,
+        costPrice,
+        salePrice,
+        category,
+        stock,
+        image,
+      } = req.body;
 
-      if (!product || Object.keys(product).length === 0) {
+      if (!name || !description || !costPrice || !salePrice || !category) {
         return res.status(400).json({
-          message: "Product data is required",
+          message: "All required fields must be provided",
         });
       }
 
-      const createdProduct = await Product.create(product);
+      const createdProduct = await Product.create({
+        ...req.body,
+        sellerId: req.user.id, // IMPORTANT ✔
+      });
 
       res.status(201).json({
         message: "Product created successfully",
@@ -36,6 +50,9 @@ router.post(
   }
 );
 
+/* -----------------------------------------------------
+    SEARCH PRODUCTS (with filters)
+------------------------------------------------------ */
 router.get("/product/search", async (req, res) => {
   try {
     const {
@@ -43,19 +60,14 @@ router.get("/product/search", async (req, res) => {
       category,
       minPrice,
       maxPrice,
-      sortBy,
-      order = "asc",
+      sortBy = "createdAt",
+      order = "desc",
     } = req.query;
 
     let filter = {};
 
-    if (name) {
-      filter.name = { $regex: name, $options: "i" };
-    }
-
-    if (category) {
-      filter.category = category;
-    }
+    if (name) filter.name = { $regex: name, $options: "i" };
+    if (category) filter.category = category;
 
     if (minPrice || maxPrice) {
       filter.salePrice = {};
@@ -63,18 +75,9 @@ router.get("/product/search", async (req, res) => {
       if (maxPrice) filter.salePrice.$lte = Number(maxPrice);
     }
 
-    let sortOptions = {};
-    if (sortBy) {
-      sortOptions[sortBy] = order === "desc" ? -1 : 1;
-    }
-
-    const products = await Product.find(filter).sort(sortOptions);
-
-    if (!products || products.length === 0) {
-      return res.status(404).json({
-        message: "No products found",
-      });
-    }
+    const products = await Product.find(filter).sort({
+      [sortBy]: order === "desc" ? -1 : 1,
+    });
 
     res.status(200).json({
       success: true,
@@ -88,18 +91,26 @@ router.get("/product/search", async (req, res) => {
   }
 });
 
+/* -----------------------------------------------------
+    LIST PRODUCTS (with pagination)
+------------------------------------------------------ */
 router.get("/product", async (req, res) => {
   try {
-    const products = await Product.find();
+    let { page = 1, limit = 20 } = req.query;
+    page = Number(page);
+    limit = Number(limit);
 
-    if (!products || products.length === 0) {
-      return res.status(404).json({
-        message: "No products found",
-      });
-    }
+    const products = await Product.find()
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .sort({ createdAt: -1 });
+
+    const total = await Product.countDocuments();
 
     res.status(200).json({
       success: true,
+      page,
+      totalPages: Math.ceil(total / limit),
       products,
     });
   } catch (error) {
@@ -110,6 +121,9 @@ router.get("/product", async (req, res) => {
   }
 });
 
+/* -----------------------------------------------------
+    GET SINGLE PRODUCT
+------------------------------------------------------ */
 router.get("/product/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -140,6 +154,9 @@ router.get("/product/:id", async (req, res) => {
   }
 });
 
+/* -----------------------------------------------------
+    ADMIN: UPDATE PRODUCT
+------------------------------------------------------ */
 router.put(
   "/product/:id",
   verifyToken,
@@ -149,27 +166,21 @@ router.put(
       const { id } = req.params;
       const data = req.body;
 
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({
-          message: "Invalid product ID",
-        });
-      }
+      if (!mongoose.Types.ObjectId.isValid(id))
+        return res.status(400).json({ message: "Invalid product ID" });
 
-      const product = await Product.findByIdAndUpdate(id, data, {
+      const updated = await Product.findByIdAndUpdate(id, data, {
         new: true,
         runValidators: true,
       });
 
-      if (!product) {
-        return res.status(404).json({
-          message: "Product does not exist",
-        });
-      }
+      if (!updated)
+        return res.status(404).json({ message: "Product not found" });
 
       res.status(200).json({
-        message: "Product updated successfully",
         success: true,
-        product,
+        message: "Product updated successfully",
+        product: updated,
       });
     } catch (error) {
       res.status(500).json({
@@ -180,6 +191,9 @@ router.put(
   }
 );
 
+/* -----------------------------------------------------
+    ADMIN: DELETE PRODUCT
+------------------------------------------------------ */
 router.delete(
   "/product/:id",
   verifyToken,
@@ -188,24 +202,18 @@ router.delete(
     try {
       const { id } = req.params;
 
-      if (!mongoose.Types.ObjectId.isValid(id)) {
-        return res.status(400).json({
-          message: "Invalid product ID",
-        });
-      }
+      if (!mongoose.Types.ObjectId.isValid(id))
+        return res.status(400).json({ message: "Invalid product ID" });
 
-      const deletedProduct = await Product.findByIdAndDelete(id);
+      const deleted = await Product.findByIdAndDelete(id);
 
-      if (!deletedProduct) {
-        return res.status(404).json({
-          message: "Product not found",
-        });
-      }
+      if (!deleted)
+        return res.status(404).json({ message: "Product not found" });
 
       res.status(200).json({
-        message: "Product deleted successfully",
         success: true,
-        product: deletedProduct,
+        message: "Product deleted successfully",
+        product: deleted,
       });
     } catch (error) {
       res.status(500).json({
