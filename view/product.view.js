@@ -15,15 +15,7 @@ router.post(
   AutherizeRole("admin"),
   async (req, res) => {
     try {
-      const {
-        name,
-        description,
-        costPrice,
-        salePrice,
-        category,
-        stock,
-        image,
-      } = req.body;
+      const { name, description, costPrice, salePrice, category } = req.body;
 
       if (!name || !description || !costPrice || !salePrice || !category) {
         return res.status(400).json({
@@ -33,7 +25,7 @@ router.post(
 
       const createdProduct = await Product.create({
         ...req.body,
-        sellerId: req.user.id, // IMPORTANT ✔
+        sellerId: req.user.id,
       });
 
       res.status(201).json({
@@ -42,6 +34,9 @@ router.post(
         product: createdProduct,
       });
     } catch (error) {
+      if (error.name === "ValidationError") {
+        return res.status(400).json({ message: error.message });
+      }
       res.status(500).json({
         message: "Failed to create product",
         error: error.message,
@@ -51,7 +46,7 @@ router.post(
 );
 
 /* -----------------------------------------------------
-    SEARCH PRODUCTS (with filters)
+    SEARCH PRODUCTS
 ------------------------------------------------------ */
 router.get("/product/search", async (req, res) => {
   try {
@@ -79,10 +74,7 @@ router.get("/product/search", async (req, res) => {
       [sortBy]: order === "desc" ? -1 : 1,
     });
 
-    res.status(200).json({
-      success: true,
-      products,
-    });
+    res.status(200).json({ success: true, products });
   } catch (error) {
     res.status(500).json({
       message: "Product search failed",
@@ -92,11 +84,12 @@ router.get("/product/search", async (req, res) => {
 });
 
 /* -----------------------------------------------------
-    LIST PRODUCTS (with pagination)
+    LIST PRODUCTS (pagination)
 ------------------------------------------------------ */
 router.get("/product", async (req, res) => {
   try {
     let { page = 1, limit = 20 } = req.query;
+
     page = Number(page);
     limit = Number(limit);
 
@@ -128,24 +121,14 @@ router.get("/product/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid product ID",
-      });
-    }
+    if (!mongoose.Types.ObjectId.isValid(id))
+      return res.status(400).json({ message: "Invalid product ID" });
 
     const product = await Product.findById(id);
 
-    if (!product) {
-      return res.status(404).json({
-        message: "Product not found",
-      });
-    }
+    if (!product) return res.status(404).json({ message: "Product not found" });
 
-    res.status(200).json({
-      success: true,
-      product,
-    });
+    res.status(200).json({ success: true, product });
   } catch (error) {
     res.status(500).json({
       message: "Failed to fetch product",
@@ -155,7 +138,7 @@ router.get("/product/:id", async (req, res) => {
 });
 
 /* -----------------------------------------------------
-    ADMIN: UPDATE PRODUCT
+    ADMIN: UPDATE PRODUCT (also handles stock updates)
 ------------------------------------------------------ */
 router.put(
   "/product/:id",
@@ -164,12 +147,16 @@ router.put(
   async (req, res) => {
     try {
       const { id } = req.params;
-      const data = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(id))
         return res.status(400).json({ message: "Invalid product ID" });
 
-      const updated = await Product.findByIdAndUpdate(id, data, {
+      // Prevent negative stock silently
+      if (req.body.stock !== undefined && req.body.stock < 0) {
+        return res.status(400).json({ message: "Stock cannot be negative" });
+      }
+
+      const updated = await Product.findByIdAndUpdate(id, req.body, {
         new: true,
         runValidators: true,
       });

@@ -8,86 +8,16 @@ import AutherizeRole from "../auth/role.middleware.js";
 const router = express.Router();
 
 /* -----------------------------------------
-   ADD TO CART (Users Only)
+   Helpers
 ------------------------------------------ */
-router.post(
-  "/cart/add",
-  verifyToken,
-  AutherizeRole("user"),
-  async (req, res) => {
-    try {
-      const { productId, quantity = 1 } = req.body;
-      const userId = req.user.id;
+const isValid = (id) => mongoose.Types.ObjectId.isValid(id);
 
-      if (!productId) {
-        return res.status(400).json({
-          message: "Product ID is required",
-        });
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(productId)) {
-        return res.status(400).json({
-          message: "Invalid product ID",
-        });
-      }
-
-      if (quantity < 1) {
-        return res.status(400).json({
-          message: "Quantity must be at least 1",
-        });
-      }
-
-      const product = await Product.findById(productId);
-      if (!product) {
-        return res.status(404).json({
-          message: "Product not found",
-        });
-      }
-
-      let cart = await Cart.findOne({ userId });
-
-      if (!cart) {
-        cart = new Cart({
-          userId,
-          products: [],
-          totalAmount: 0,
-        });
-      }
-
-      const productIndex = cart.products.findIndex(
-        (item) => item.productId.toString() === productId
-      );
-
-      if (productIndex > -1) {
-        cart.products[productIndex].quantity += quantity;
-      } else {
-        cart.products.push({
-          productId,
-          price: product.salePrice,
-          quantity,
-        });
-      }
-
-      cart.totalAmount = cart.products.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
-
-      await cart.save();
-
-      res.status(201).json({
-        message: "Product added to cart",
-        success: true,
-        cart,
-      });
-    } catch (error) {
-      res.status(500).json({
-        message: "Failed to add product to cart",
-        error: error.message,
-      });
-    }
-  }
-);
+const calculateTotal = (cart) => {
+  cart.totalAmount = cart.products.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+};
 
 /* -----------------------------------------
    GET CART (Users Only)
@@ -96,16 +26,13 @@ router.get("/cart", verifyToken, AutherizeRole("user"), async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const cart = await Cart.findOne({ userId });
+    const cart = await Cart.findOne({ userId }).populate("products.productId");
 
     if (!cart) {
-      return res.status(404).json({
-        message: "No cart exists",
-      });
+      return res.status(404).json({ message: "No cart exists" });
     }
 
     res.status(200).json({
-      message: "Cart fetched",
       success: true,
       cart,
     });
@@ -118,69 +45,113 @@ router.get("/cart", verifyToken, AutherizeRole("user"), async (req, res) => {
 });
 
 /* -----------------------------------------
-   REMOVE ITEM (Users Only)
+   PATCH /cart/item
+   Unified Route:
+   - add
+   - increase
+   - decrease
+   - remove
 ------------------------------------------ */
-router.delete(
-  "/cart/remove/:id",
+router.patch(
+  "/cart/item",
   verifyToken,
   AutherizeRole("user"),
   async (req, res) => {
     try {
-      const productId = req.params.id;
+      const { productId, action, quantity = 1 } = req.body;
       const userId = req.user.id;
 
-      if (!mongoose.Types.ObjectId.isValid(productId)) {
-        return res.status(400).json({
-          message: "Invalid product ID",
-        });
+      if (!productId)
+        return res.status(400).json({ message: "Product ID is required" });
+
+      if (!isValid(productId))
+        return res.status(400).json({ message: "Invalid product ID" });
+
+      if (!["add", "increase", "decrease", "remove"].includes(action)) {
+        return res.status(400).json({ message: "Invalid action type" });
       }
 
-      const cart = await Cart.findOne({ userId });
+      const product = await Product.findById(productId);
+      if (!product)
+        return res.status(404).json({ message: "Product not found" });
 
-      if (!cart) {
-        return res.status(404).json({
-          message: "No cart exists",
-        });
-      }
+      let cart = await Cart.findOne({ userId });
+      if (!cart) cart = new Cart({ userId, products: [], totalAmount: 0 });
 
-      if (cart.products.length === 0) {
-        return res.status(400).json({
-          message: "No products to remove",
-        });
-      }
-
-      const productIndex = cart.products.findIndex(
+      const index = cart.products.findIndex(
         (item) => item.productId.toString() === productId
       );
+      const item = cart.products[index];
 
-      if (productIndex === -1) {
-        return res.status(404).json({
-          message: "Product not found in cart",
-        });
+      /* -----------------------------------
+         ACTION HANDLING
+      ----------------------------------- */
+
+      if (action === "add") {
+        if (!item) {
+          if (quantity > product.stock)
+            return res.status(400).json({
+              message: `Only ${product.stock} units available`,
+            });
+
+          cart.products.push({
+            productId,
+            price: product.salePrice,
+            quantity,
+          });
+        } else {
+          if (item.quantity + quantity > product.stock)
+            return res.status(400).json({
+              message: `Only ${product.stock} units available`,
+            });
+
+          item.quantity += quantity;
+        }
+      } else if (action === "increase") {
+        if (!item)
+          return res.status(404).json({ message: "Product not in cart" });
+
+        if (item.quantity >= product.stock)
+          return res.status(400).json({
+            message: "No more stock available",
+          });
+
+        item.quantity += 1;
+      } else if (action === "decrease") {
+        if (!item)
+          return res.status(404).json({ message: "Product not in cart" });
+
+        if (item.quantity <= 1) {
+          cart.products.splice(index, 1);
+        } else {
+          item.quantity -= 1;
+        }
+      } else if (action === "remove") {
+        if (!item)
+          return res.status(404).json({ message: "Product not in cart" });
+
+        cart.products.splice(index, 1);
       }
 
-      if (cart.products[productIndex].quantity === 1) {
-        cart.products.splice(productIndex, 1);
-      } else {
-        cart.products[productIndex].quantity -= 1;
-      }
-
-      cart.totalAmount = cart.products.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
-
+      /* -----------------------------------
+         SAVE + RESPOND
+      ----------------------------------- */
+      calculateTotal(cart);
       await cart.save();
 
+      const populated = await Cart.findById(cart._id).populate(
+        "products.productId"
+      );
+
       res.status(200).json({
-        message: "Product removed",
         success: true,
-        cart,
+        message: "Cart updated",
+        cart: populated,
       });
-    } catch (error) {
+    } catch (err) {
       res.status(500).json({
-        message: "Failed to remove product",
-        error: error.message,
+        message: "Cart update failed",
+        error: err.message,
       });
     }
   }
