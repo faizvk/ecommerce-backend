@@ -13,19 +13,28 @@ const productSchema = mongoose.Schema(
       trim: true,
       index: true,
     },
+
     description: {
       type: String,
       required: true,
+      trim: true,
     },
     costPrice: {
       type: Number,
       min: 0,
       required: true,
     },
+
     salePrice: {
       type: Number,
       min: 0,
       required: true,
+      validate: {
+        validator: function (value) {
+          return value >= this.costPrice;
+        },
+        message: "Sale price must be equal or greater than cost price",
+      },
     },
     category: {
       type: String,
@@ -37,6 +46,7 @@ const productSchema = mongoose.Schema(
         "home appliances",
       ],
       required: true,
+      index: true,
     },
     stock: {
       type: Number,

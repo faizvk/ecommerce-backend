@@ -15,6 +15,9 @@ const userSchema = mongoose.Schema(
       type: String,
       unique: true,
       required: true,
+      lowercase: true,
+      trim: true,
+      index: true,
       validate: {
         validator: function (email) {
           return /^((?!\.)[\w\-_.]*[^.])(@\w+)(\.\w+(\.\w+)?[^.\W])$/.test(
@@ -29,8 +32,9 @@ const userSchema = mongoose.Schema(
       required: true,
     },
     contact: {
-      type: Number,
+      type: String,
       required: true,
+      trim: true,
     },
     role: {
       type: String,
@@ -42,7 +46,7 @@ const userSchema = mongoose.Schema(
       required: true,
       select: false,
       match: [
-        /^(?=.*\d)(?=.*[A-Z])(?=.*[a-z])(?=.*[^\w\d\s:])([^\s]){8,16}$/,
+        /^(?=.*\d)(?=.*[A-Z])(?=.*[a-z])(?=.*[^\w\d\s:]).{8,16}$/,
         "Please enter a stronger password",
       ],
     },
