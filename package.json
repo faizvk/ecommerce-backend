@@ -22,6 +22,7 @@
     "jsonwebtoken": "^9.0.2",
     "mo": "^1.7.3",
     "mongoose": "^9.0.0",
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "razorpay": "^2.9.6"
   }
 }

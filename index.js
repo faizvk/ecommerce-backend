@@ -11,6 +11,7 @@ import userRoutes from "./view/user.view.js";
 import productRoutes from "./view/product.view.js";
 import cartRoutes from "./view/cart.view.js";
 import orderRoutes from "./view/order.view.js";
+import paymentRoutes from "./view/payment.view.js";
 
 dotenv.config();
 const app = express();
@@ -62,6 +63,7 @@ app.use("/api", userRoutes);
 app.use("/api", productRoutes);
 app.use("/api", cartRoutes);
 app.use("/api", orderRoutes);
+app.use("/api", paymentRoutes);
 
 // HEALTH CHECK
 app.get("/api/health", (req, res) => {
