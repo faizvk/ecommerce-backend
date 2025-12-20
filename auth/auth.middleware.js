@@ -1,9 +1,8 @@
 import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-dotenv.config();
+import { ACCESS_SECRET_KEY, REFRESH_SECRET_KEY } from "../config/env.js";
 
-const accessSecret = process.env.ACCESS_SECRET_KEY;
-const refreshSecret = process.env.REFRESH_SECRET_KEY;
+const accessSecret = ACCESS_SECRET_KEY;
+const refreshSecret = REFRESH_SECRET_KEY;
 
 const createAccessToken = (user) => {
   let token = jwt.sign(

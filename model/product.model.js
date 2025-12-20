@@ -31,7 +31,7 @@ const productSchema = mongoose.Schema(
       required: true,
       validate: {
         validator: function (value) {
-          return value <= this.costPrice;
+          return value >= this.costPrice;
         },
         message: "Sale price must be equal or lesser than cost price",
       },

@@ -5,8 +5,9 @@ dotenv.config();
 export const {
   PORT,
   MONGOOSE_URI,
-  NODE_ENV,
-  JWT_SECRET,
-  JWT_REFRESH_SECRET,
+  ACCESS_SECRET_KEY,
+  REFRESH_SECRET_KEY,
   CLIENT_URL,
+  RAZORPAY_KEY_ID,
+  RAZORPAY_KEY_SECRET,
 } = process.env;
